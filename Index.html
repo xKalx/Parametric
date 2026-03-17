@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYBERPUNK AUDIO SYSTEM</title>
+  <title>By Douglas Alfaro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+ :root {
+  --phosphor: #ff003c;          /* neon red */
+  --phosphor-dim: #8a0025;     /* dark red */
+  --phosphor-glow: rgba(255,0,60,0.2);
+
+  --amber: #00eaff;            /* neon cyan/blue */
+  --red-warn: #ff003c;
+
+  --bg: #050505;               /* deep black */
+  --panel: #0a0a0f;            /* slightly blue-black */
+  --border: #1a1a2e;           /* subtle blue border */
+}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--phosphor);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* CRT scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* CRT vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 998;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+  }
+
+  .sys-title {
+    font-family: 'Orbitron', monospace;
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 4px;
+    color: var(--phosphor);
+    text-shadow: 0 0 12px var(--phosphor);
+  }
+
+  .sys-meta {
+    font-size: 10px;
+    color: var(--phosphor-dim);
+    letter-spacing: 2px;
+  }
+
+  #status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--phosphor-dim);
+    margin-right: 8px;
+    transition: all 0.3s;
+  }
+  #status-dot.active {
+    background: var(--phosphor);
+    box-shadow: 0 0 8px var(--phosphor);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    grid-template-rows: auto auto;
+    gap: 1px;
+    background: var(--border);
+    height: calc(100vh - 53px);
+  }
+
+  .panel {
+    background: var(--panel);
+    padding: 16px;
+    position: relative;
+  }
+
+  .panel-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--phosphor-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* === VISUALIZER === */
+  #viz-panel {
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0;
+  }
+
+  #waveform-wrap, #spectrum-wrap {
+    flex: 1;
+    background: var(--panel);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  canvas {
+    flex: 1;
+    width: 100%;
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+
+  /* === CONTROLS PANEL === */
+  #controls-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+  }
+
+  .ctrl-group {
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 2px;
+    background: rgba(0,255,65,0.02);
+  }
+
+  .ctrl-group-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 8px;
+    letter-spacing: 3px;
+    color: var(--phosphor-dim);
+    margin-bottom: 12px;
+  }
+
+  .param-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .param-label {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--phosphor-dim);
+    margin-bottom: 4px;
+  }
+
+  .param-value {
+    font-size: 11px;
+    color: var(--phosphor);
+    min-width: 48px;
+    text-align: right;
+    text-shadow: 0 0 6px var(--phosphor);
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 0;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: var(--phosphor);
+    border-radius: 0;
+    box-shadow: 0 0 6px var(--phosphor);
+    cursor: pointer;
+  }
+  input[type=range]:hover {
+    background: var(--phosphor-dim);
+  }
+
+  /* === FEEDBACK METER === */
+  #feedback-section {
+    border: 1px solid var(--border);
+    padding: 12px;
+  }
+
+  .fb-meter-wrap {
+    margin-top: 8px;
+  }
+  .fb-bar-bg {
+    height: 6px;
+    background: var(--border);
+    border-radius: 0;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .fb-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--phosphor-dim), var(--phosphor));
+    transition: width 0.05s;
+    box-shadow: 0 0 8px var(--phosphor);
+  }
+  .fb-bar.warn { background: linear-gradient(90deg, var(--amber), var(--red-warn)); }
+
+  .fb-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--phosphor-dim);
+  }
+
+  /* === SYSTEM DIAGRAM === */
+  #diagram {
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    line-height: 1.8;
+    color: var(--phosphor-dim);
+  }
+  .flow-node {
+    display: inline-block;
+    border: 1px solid var(--phosphor-dim);
+    padding: 1px 6px;
+    margin: 1px;
+    font-size: 8px;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .flow-node.active {
+    border-color: var(--phosphor);
+    color: var(--phosphor);
+    box-shadow: 0 0 6px var(--phosphor);
+  }
+  .flow-arrow {
+    color: var(--phosphor-dim);
+    margin: 0 2px;
+  }
+  .flow-feedback {
+    color: var(--amber);
+    font-size: 8px;
+    display: block;
+    margin-top: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* === ACTIVATE BUTTON === */
+  #activate-btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--bg);
+    background: var(--phosphor);
+    border: none;
+    padding: 12px 20px;
+    cursor: pointer;
+    width: 100%;
+    text-transform: uppercase;
+    box-shadow: 0 0 20px rgba(0,255,65,0.4);
+    transition: all 0.2s;
+    font-weight: 700;
+  }
+  #activate-btn:hover {
+    box-shadow: 0 0 30px rgba(0,255,65,0.7);
+    transform: scaleY(1.02);
+  }
+  #activate-btn.running {
+    background: transparent;
+    color: var(--phosphor);
+    border: 1px solid var(--phosphor);
+    box-shadow: 0 0 10px rgba(0,255,65,0.2);
+  }
+
+  /* === READOUTS === */
+  .readout-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .readout {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .readout-val {
+    font-size: 14px;
+    color: var(--phosphor);
+    text-shadow: 0 0 8px var(--phosphor);
+    display: block;
+  }
+  .readout-lbl {
+    font-size: 8px;
+    color: var(--phosphor-dim);
+    letter-spacing: 1px;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 0;
+  }
+
+  /* Toggle switches for cybernetic modules */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .toggle-lbl { font-size: 9px; letter-spacing: 1px; color: var(--phosphor-dim); }
+
+  .toggle {
+    position: relative;
+    width: 32px; height: 16px;
+    cursor: pointer;
+  }
+  .toggle input { display: none; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 0;
+    transition: 0.2s;
+  }
+  .toggle-thumb {
+    position: absolute;
+    width: 10px; height: 10px;
+    background: var(--phosphor-dim);
+    top: 3px; left: 3px;
+    transition: 0.2s;
+    border-radius: 0;
+  }
+  .toggle input:checked + .toggle-track { background: rgba(0,255,65,0.2); border: 1px solid var(--phosphor); }
+  .toggle input:checked ~ .toggle-thumb { left: 19px; background: var(--phosphor); box-shadow: 0 0 6px var(--phosphor); }
+
+  #cybernetic-strength-row { opacity: 0.4; transition: opacity 0.3s; }
+  #cybernetic-strength-row.enabled { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="sys-title">CYBERNETIC AUDIO SYSTEM <span style="font-size:9px;font-weight:400;letter-spacing:2px;color:var(--phosphor-dim)">// v2.1</span></div>
+  <div class="sys-meta"><span id="status-dot"></span><span id="status-text">STANDBY</span></div>
+</header>
+
+<main>
+
+  <!-- LEFT: VISUALIZERS -->
+  <div id="viz-panel">
+    <div id="waveform-wrap" class="panel">
+      <div class="panel-label">WAVEFORM — TIME DOMAIN</div>
+      <canvas id="waveform"></canvas>
+    </div>
+    <div id="spectrum-wrap" class="panel">
+      <div class="panel-label">SPECTRUM — FREQUENCY DOMAIN</div>
+      <canvas id="spectrum"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT: CONTROLS -->
+  <div id="controls-panel" class="panel">
+
+    <button id="activate-btn">▶ ACTIVATE MIC INPUT</button>
+
+    <!-- Live readouts -->
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">SYSTEM READOUTS</div>
+      <div class="readout-grid">
+        <div class="readout">
+          <span class="readout-val" id="read-rms">—</span>
+          <span class="readout-lbl">RMS LEVEL</span>
+        </div>
+        <div class="readout">
+          <span class="readout-val" id="read-peak">—</span>
+          <span class="readout-lbl">PEAK FREQ</span>
+        </div>
+        <div class="readout">
+          <span class="readout-val" id="read-filter">—</span>
+          <span class="readout-lbl">FILTER Hz</span>
+        </div>
+        <div class="readout">
+          <span class="readout-val" id="read-fb">—</span>
+          <span class="readout-lbl">FB DEPTH</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Parametric Controls -->
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">PARAMETRIC CONTROLS</div>
+
+      <div class="param-label">INPUT GAIN</div>
+      <div class="param-row">
+        <input type="range" id="p-gain" min="0" max="3" step="0.01" value="1.2">
+        <span class="param-value" id="v-gain">1.20</span>
+      </div>
+
+      <div class="param-label">FILTER CUTOFF</div>
+      <div class="param-row">
+        <input type="range" id="p-filter" min="80" max="12000" step="10" value="3000">
+        <span class="param-value" id="v-filter">3000</span>
+      </div>
+
+      <div class="param-label">FILTER RESONANCE (Q)</div>
+      <div class="param-row">
+        <input type="range" id="p-q" min="0.1" max="20" step="0.1" value="2">
+        <span class="param-value" id="v-q">2.0</span>
+      </div>
+
+      <div class="param-label">DELAY TIME (ms)</div>
+      <div class="param-row">
+        <input type="range" id="p-delay" min="10" max="800" step="1" value="200">
+        <span class="param-value" id="v-delay">200</span>
+      </div>
+
+      <div class="param-label">DELAY FEEDBACK</div>
+      <div class="param-row">
+        <input type="range" id="p-feedback" min="0" max="0.92" step="0.01" value="0.3">
+        <span class="param-value" id="v-feedback">0.30</span>
+      </div>
+    </div>
+
+    <!-- Cybernetic Feedback -->
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">CYBERNETIC FEEDBACK LOOPS</div>
+
+      <div class="toggle-row">
+        <span class="toggle-lbl">VOICE → FILTER FREQ</span>
+        <label class="toggle">
+          <input type="checkbox" id="cb-voice-filter" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-lbl">VOICE → DELAY DEPTH</span>
+        <label class="toggle">
+          <input type="checkbox" id="cb-voice-delay" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-lbl">SPECTRUM → COLOR MAP</span>
+        <label class="toggle">
+          <input type="checkbox" id="cb-spec-color" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <div id="cybernetic-strength-row" class="enabled">
+        <div class="param-label">FEEDBACK STRENGTH</div>
+        <div class="param-row">
+          <input type="range" id="p-cybernetic" min="0" max="1" step="0.01" value="0.5">
+          <span class="param-value" id="v-cybernetic">0.50</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback meters -->
+    <div id="feedback-section" class="ctrl-group">
+      <div class="ctrl-group-title">CYBERNETIC STATE</div>
+      <div class="fb-meter-wrap">
+        <div class="fb-label-row"><span>VOICE ENERGY</span><span id="fb-val-1">0%</span></div>
+        <div class="fb-bar-bg"><div class="fb-bar" id="fb-bar-1"></div></div>
+        <div class="fb-label-row"><span>FILTER MODULATION</span><span id="fb-val-2">0%</span></div>
+        <div class="fb-bar-bg"><div class="fb-bar" id="fb-bar-2"></div></div>
+        <div class="fb-label-row"><span>FEEDBACK RESONANCE</span><span id="fb-val-3">0%</span></div>
+        <div class="fb-bar-bg"><div class="fb-bar" id="fb-bar-3"></div></div>
+        <div class="fb-label-row"><span>SPECTRAL CENTROID</span><span id="fb-val-4">0%</span></div>
+        <div class="fb-bar-bg"><div class="fb-bar" id="fb-bar-4"></div></div>
+      </div>
+    </div>
+
+    <!-- Signal flow diagram -->
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">SIGNAL TOPOLOGY</div>
+      <div id="diagram">
+        <span class="flow-node" id="node-mic">MIC</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node" id="node-gain">GAIN</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node" id="node-filter">FILTER</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node" id="node-delay">DELAY</span>
+        <br>
+        <span class="flow-arrow" style="margin-left:4px">↓</span>
+        <br>
+        <span class="flow-node" id="node-analyse">ANALYSE</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node" id="node-out">OUTPUT</span>
+        <span class="flow-feedback">⤷ CYBERNETIC: ANALYSE → PARAM SPACE</span>
+        <span class="flow-feedback" style="color:var(--phosphor-dim)">⤷ FEEDBACK: DELAY → DELAY INPUT</span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(function() {
+  let audioCtx, micSource, gainNode, filterNode, delayNode, feedbackGainNode, analyserNode;
+  let animFrame;
+  let running = false;
+  let smoothedRMS = 0;
+  let smoothedPeak = 0;
+  let smoothedCentroid = 0;
+
+  const btn = document.getElementById('activate-btn');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+
+  // Canvases
+  const wvCanvas = document.getElementById('waveform');
+  const spCanvas = document.getElementById('spectrum');
+  const wvCtx = wvCanvas.getContext('2d');
+  const spCtx = spCanvas.getContext('2d');
+
+  // Params
+  const params = {
+    gain: document.getElementById('p-gain'),
+    filter: document.getElementById('p-filter'),
+    q: document.getElementById('p-q'),
+    delay: document.getElementById('p-delay'),
+    feedback: document.getElementById('p-feedback'),
+    cybernetic: document.getElementById('p-cybernetic'),
+  };
+  const vals = {
+    gain: document.getElementById('v-gain'),
+    filter: document.getElementById('v-filter'),
+    q: document.getElementById('v-q'),
+    delay: document.getElementById('v-delay'),
+    feedback: document.getElementById('v-feedback'),
+    cybernetic: document.getElementById('v-cybernetic'),
+  };
+  const toggles = {
+    voiceFilter: document.getElementById('cb-voice-filter'),
+    voiceDelay: document.getElementById('cb-voice-delay'),
+    specColor: document.getElementById('cb-spec-color'),
+  };
+
+  // Wire up sliders
+  function wireSlider(key, decimals, suffix) {
+    params[key].addEventListener('input', () => {
+      const v = parseFloat(params[key].value);
+      vals[key].textContent = v.toFixed(decimals) + (suffix||'');
+      if (running) applyParams();
+    });
+  }
+  wireSlider('gain', 2); wireSlider('filter', 0, ' Hz'); wireSlider('q', 1);
+  wireSlider('delay', 0, ' ms'); wireSlider('feedback', 2); wireSlider('cybernetic', 2);
+
+  function applyParams() {
+    if (!running) return;
+    gainNode.gain.setTargetAtTime(parseFloat(params.gain.value), audioCtx.currentTime, 0.01);
+    filterNode.frequency.setTargetAtTime(parseFloat(params.filter.value), audioCtx.currentTime, 0.01);
+    filterNode.Q.setTargetAtTime(parseFloat(params.q.value), audioCtx.currentTime, 0.01);
+    delayNode.delayTime.setTargetAtTime(parseFloat(params.delay.value) / 1000, audioCtx.currentTime, 0.01);
+    feedbackGainNode.gain.setTargetAtTime(parseFloat(params.feedback.value), audioCtx.currentTime, 0.01);
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!running) {
+      await startSystem();
+    } else {
+      stopSystem();
+    }
+  });
+
+  async function startSystem() {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+      micSource = audioCtx.createMediaStreamSource(stream);
+      gainNode = audioCtx.createGain();
+      filterNode = audioCtx.createBiquadFilter();
+      filterNode.type = 'bandpass';
+      delayNode = audioCtx.createDelay(1.0);
+      feedbackGainNode = audioCtx.createGain();
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 2048;
+      analyserNode.smoothingTimeConstant = 0.8;
+
+      // Signal chain: mic → gain → filter → delay → analyser → out
+      micSource.connect(gainNode);
+      gainNode.connect(filterNode);
+      filterNode.connect(delayNode);
+      delayNode.connect(feedbackGainNode);
+      feedbackGainNode.connect(delayNode); // feedback loop
+      filterNode.connect(analyserNode);
+      delayNode.connect(analyserNode);
+      // We DON'T connect to destination by default (avoid feedback howl)
+      // analyserNode monitors only
+
+      applyParams();
+      running = true;
+
+      btn.textContent = '■ DEACTIVATE';
+      btn.classList.add('running');
+      statusDot.classList.add('active');
+      statusText.textContent = 'RUNNING';
+
+      // Activate diagram nodes
+      ['node-mic','node-gain','node-filter','node-delay','node-analyse'].forEach(id => {
+        document.getElementById(id).classList.add('active');
+      });
+
+      drawLoop();
+
+    } catch(e) {
+      statusText.textContent = 'MIC ACCESS DENIED';
+      console.error(e);
+    }
+  }
+
+  function stopSystem() {
+    running = false;
+    cancelAnimationFrame(animFrame);
+    if (audioCtx) audioCtx.close();
+    btn.textContent = '▶ ACTIVATE MIC INPUT';
+    btn.classList.remove('running');
+    statusDot.classList.remove('active');
+    statusText.textContent = 'STANDBY';
+    document.querySelectorAll('.flow-node').forEach(n => n.classList.remove('active'));
+    clearCanvases();
+  }
+
+  function clearCanvases() {
+    wvCtx.clearRect(0, 0, wvCanvas.width, wvCanvas.height);
+    spCtx.clearRect(0, 0, spCanvas.width, spCanvas.height);
+  }
+
+  function resizeCanvases() {
+    wvCanvas.width = wvCanvas.offsetWidth * devicePixelRatio;
+    wvCanvas.height = wvCanvas.offsetHeight * devicePixelRatio;
+    spCanvas.width = spCanvas.offsetWidth * devicePixelRatio;
+    spCanvas.height = spCanvas.offsetHeight * devicePixelRatio;
+  }
+  window.addEventListener('resize', resizeCanvases);
+  resizeCanvases();
+
+  function getRMS(data) {
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const s = (data[i] - 128) / 128;
+      sum += s * s;
+    }
+    return Math.sqrt(sum / data.length);
+  }
+
+  function getPeakFreq(freqData, sampleRate) {
+    let maxIdx = 0, maxVal = -Infinity;
+    for (let i = 0; i < freqData.length; i++) {
+      if (freqData[i] > maxVal) { maxVal = freqData[i]; maxIdx = i; }
+    }
+    return Math.round(maxIdx * sampleRate / (analyserNode.fftSize));
+  }
+
+  function getSpectralCentroid(freqData, sampleRate) {
+    let weightedSum = 0, totalAmp = 0;
+    for (let i = 1; i < freqData.length; i++) {
+      const amp = freqData[i] / 255;
+      const freq = i * sampleRate / analyserNode.fftSize;
+      weightedSum += freq * amp;
+      totalAmp += amp;
+    }
+    return totalAmp > 0 ? weightedSum / totalAmp : 0;
+  }
+
+  function hslToHex(h, s, l) {
+    const a = s * Math.min(l, 1 - l);
+    const f = n => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+      return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  }
+
+  function drawLoop() {
+    if (!running) return;
+    animFrame = requestAnimationFrame(drawLoop);
+
+    resizeCanvases();
+
+    const bufferLen = analyserNode.frequencyBinCount;
+    const timeData = new Uint8Array(bufferLen);
+    const freqData = new Uint8Array(bufferLen);
+    analyserNode.getByteTimeDomainData(timeData);
+    analyserNode.getByteFrequencyData(freqData);
+
+    const sampleRate = audioCtx.sampleRate;
+    const rms = getRMS(timeData);
+    const peakFreq = getPeakFreq(freqData, sampleRate);
+    const centroid = getSpectralCentroid(freqData, sampleRate);
+    const cyberStr = parseFloat(params.cybernetic.value);
+
+    // Smooth values
+    smoothedRMS = smoothedRMS * 0.85 + rms * 0.15;
+    smoothedPeak = smoothedPeak * 0.9 + peakFreq * 0.1;
+    smoothedCentroid = smoothedCentroid * 0.9 + centroid * 0.1;
+
+    // === CYBERNETIC FEEDBACK APPLICATION ===
+    if (toggles.voiceFilter.checked) {
+      // Voice amplitude → modulate filter frequency
+      const baseFilter = parseFloat(params.filter.value);
+      const modulation = smoothedRMS * cyberStr * 8000;
+      filterNode.frequency.setTargetAtTime(
+        Math.min(12000, Math.max(80, baseFilter + modulation)),
+        audioCtx.currentTime, 0.05
+      );
+    }
+    if (toggles.voiceDelay.checked) {
+      // Voice amplitude → modulate delay feedback depth
+      const baseDelay = parseFloat(params.feedback.value);
+      const modDelay = baseDelay + smoothedRMS * cyberStr * 0.4;
+      feedbackGainNode.gain.setTargetAtTime(
+        Math.min(0.95, modDelay),
+        audioCtx.currentTime, 0.05
+      );
+    }
+
+    // === READOUTS ===
+    document.getElementById('read-rms').textContent = (smoothedRMS * 100).toFixed(1);
+    document.getElementById('read-peak').textContent = Math.round(smoothedPeak) + ' Hz';
+    document.getElementById('read-filter').textContent = Math.round(filterNode.frequency.value);
+    document.getElementById('read-fb').textContent = feedbackGainNode.gain.value.toFixed(2);
+
+    // === FEEDBACK METERS ===
+    const voiceEnergy = Math.min(1, smoothedRMS * 8);
+    const filterMod = toggles.voiceFilter.checked ? Math.min(1, smoothedRMS * cyberStr * 15) : 0;
+    const fbRes = Math.min(1, feedbackGainNode.gain.value / 0.95);
+    const specNorm = Math.min(1, smoothedCentroid / 8000);
+
+    updateMeter('fb-bar-1', 'fb-val-1', voiceEnergy);
+    updateMeter('fb-bar-2', 'fb-val-2', filterMod);
+    updateMeter('fb-bar-3', 'fb-val-3', fbRes);
+    updateMeter('fb-bar-4', 'fb-val-4', specNorm);
+
+    // === DRAW WAVEFORM ===
+    const ww = wvCanvas.width, wh = wvCanvas.height;
+    wvCtx.clearRect(0, 0, ww, wh);
+
+    // Grid
+    wvCtx.strokeStyle = 'rgba(0,255,65,0.06)';
+    wvCtx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      wvCtx.beginPath();
+      wvCtx.moveTo(0, (i / 8) * wh); wvCtx.lineTo(ww, (i / 8) * wh);
+      wvCtx.stroke();
+    }
+    for (let i = 0; i <= 12; i++) {
+      wvCtx.beginPath();
+      wvCtx.moveTo((i / 12) * ww, 0); wvCtx.lineTo((i / 12) * ww, wh);
+      wvCtx.stroke();
+    }
+    // Center line
+    wvCtx.strokeStyle = 'rgba(0,255,65,0.15)';
+    wvCtx.beginPath();
+    wvCtx.moveTo(0, wh / 2); wvCtx.lineTo(ww, wh / 2);
+    wvCtx.stroke();
+
+    // Waveform glow
+    const waveGlow = Math.min(20, smoothedRMS * 120);
+    wvCtx.shadowBlur = waveGlow;
+    wvCtx.shadowColor = '#ff003c';
+    wvCtx.strokeStyle = toggles.specColor.checked
+      ? hslToHex(120 - smoothedCentroid / 60, 0.9, 0.55)
+      : '#ff003c';
+    wvCtx.lineWidth = 1.5 * devicePixelRatio;
+    wvCtx.beginPath();
+    const sliceW = ww / bufferLen;
+    let x = 0;
+    for (let i = 0; i < bufferLen; i++) {
+      const v = (timeData[i] - 128) / 128.0;
+      const y = wh / 2 + v * wh * 0.42;
+      if (i === 0) wvCtx.moveTo(x, y);
+      else wvCtx.lineTo(x, y);
+      x += sliceW;
+    }
+    wvCtx.stroke();
+    wvCtx.shadowBlur = 0;
+
+    // === DRAW SPECTRUM ===
+    const sw = spCanvas.width, sh = spCanvas.height;
+    spCtx.clearRect(0, 0, sw, sh);
+
+    // Grid
+    spCtx.strokeStyle = 'rgba(0,234,255,0.7)';
+    spCtx.lineWidth = 1;
+    for (let i = 0; i <= 6; i++) {
+      spCtx.beginPath();
+      spCtx.moveTo(0, (i / 6) * sh); spCtx.lineTo(sw, (i / 6) * sh);
+      spCtx.stroke();
+    }
+
+    const barCount = 128;
+    const barW = sw / barCount;
+    for (let i = 0; i < barCount; i++) {
+      const srcIdx = Math.floor(i * (freqData.length / 2) / barCount);
+      const amp = freqData[srcIdx] / 255;
+      const barH = amp * sh * 0.95;
+
+      let hue, sat, lit;
+      if (toggles.specColor.checked) {
+        hue = 120 - (i / barCount) * 100 - smoothedCentroid / 120;
+        sat = 0.8 + amp * 0.2;
+        lit = 0.3 + amp * 0.4;
+      } else {
+        hue = 120; sat = 0.9; lit = 0.3 + amp * 0.35;
+      }
+
+      const color = hslToHex(Math.max(20, Math.min(160, hue)), sat, lit);
+
+      spCtx.shadowBlur = amp > 0.6 ? 12 : 0;
+      spCtx.shadowColor = color;
+      spCtx.fillStyle ='rgba(0,234,255,0.9)';
+      spCtx.fillRect(i * barW + 1, sh - barH, Math.max(1, barW - 1), barH);
+    }
+    spCtx.shadowBlur = 0;
+
+    // Centroid marker
+    const centroidX = (smoothedCentroid / (sampleRate / 2)) * sw;
+    spCtx.strokeStyle = 'rgba(255,179,0,0.7)';
+    spCtx.lineWidth = 1.5 * devicePixelRatio;
+    spCtx.shadowBlur = 8; spCtx.shadowColor = '#ffb300';
+    spCtx.beginPath();
+    spCtx.moveTo(centroidX, 0);
+    spCtx.lineTo(centroidX, sh);
+    spCtx.stroke();
+    spCtx.shadowBlur = 0;
+    spCtx.fillStyle = 'rgba(255,179,0,0.9)';
+    spCtx.font = `${10 * devicePixelRatio}px "Share Tech Mono"`;
+    spCtx.fillText('CENTROID', Math.min(centroidX + 4, sw - 80 * devicePixelRatio), 14 * devicePixelRatio);
+  }
+
+  function updateMeter(barId, valId, fraction) {
+    const pct = (fraction * 100).toFixed(0);
+    const bar = document.getElementById(barId);
+    bar.style.width = pct + '%';
+    bar.className = 'fb-bar' + (fraction > 0.8 ? ' warn' : '');
+    document.getElementById(valId).textContent = pct + '%';
+  }
+
+  // Idle animation when not running
+  function idleAnimation() {
+    if (running) return;
+    resizeCanvases();
+    const t = Date.now() / 1000;
+    const ww = wvCanvas.width, wh = wvCanvas.height;
+    const sw = spCanvas.width, sh = spCanvas.height;
+
+    wvCtx.clearRect(0, 0, ww, wh);
+    wvCtx.strokeStyle = 'rgba(0,255,65,0.04)';
+    wvCtx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      wvCtx.beginPath(); wvCtx.moveTo(0, (i/8)*wh); wvCtx.lineTo(ww, (i/8)*wh); wvCtx.stroke();
+    }
+    wvCtx.strokeStyle = 'rgba(0,255,65,0.15)';
+    wvCtx.beginPath(); wvCtx.moveTo(0, wh/2); wvCtx.lineTo(ww, wh/2); wvCtx.stroke();
+
+    // Flat line with subtle noise
+    wvCtx.strokeStyle = 'rgba(0,255,65,0.3)';
+    wvCtx.lineWidth = 1.5;
+    wvCtx.beginPath();
+    for (let x = 0; x < ww; x++) {
+      const noise = Math.sin(x * 0.08 + t * 0.7) * 1.5 + Math.sin(x * 0.023 + t * 0.3) * 1;
+      const y = wh / 2 + noise;
+      x === 0 ? wvCtx.moveTo(x, y) : wvCtx.lineTo(x, y);
+    }
+    wvCtx.stroke();
+
+    spCtx.clearRect(0, 0, sw, sh);
+    for (let i = 0; i < 128; i++) {
+      const amp = Math.max(0, Math.sin(i * 0.15 + t * 0.5) * 0.04 + 0.02);
+      spCtx.fillStyle = `rgba(0,255,65,${amp * 5})`;
+      spCtx.fillRect(i * (sw/128), sh - amp * sh * 3, sw/128 - 1, amp * sh * 3);
+    }
+
+    requestAnimationFrame(idleAnimation);
+  }
+  idleAnimation();
+
+})();
+</script>
+</body>
+</html>
